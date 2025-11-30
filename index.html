@@ -3,176 +3,153 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cuestionario RFEF (Lector Excel)</title>
+    <title>Cuestionario RFEF (Cloud)</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- FontAwesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- SheetJS (Librería esencial para leer Excel) -->
+    <!-- SheetJS -->
     <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
 
     <style>
-        body { 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-            background-color: #e2e8f0; 
-            color: #334155; 
-        }
-        
-        .fade-in { animation: fadeIn 0.4s ease-out; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #e2e8f0; color: #334155; }
+        .fade-in { animation: fadeIn 0.5s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         
         .btn-rule { transition: all 0.2s ease-in-out; }
         .btn-rule:hover { transform: translateY(-2px); box-shadow: 0 6px 12px -2px rgba(51, 65, 85, 0.15); }
         .btn-rule:active { transform: translateY(0); box-shadow: none; }
         
-        .selected-option { 
-            background-color: #e0f2fe !important; 
-            border: 2px solid #0ea5e9 !important; 
-            color: #0c4a6e !important; 
-            font-weight: 700;
-        }
-
-        .text-content-style {
-            text-align: justify;
-            text-justify: inter-word;
-            -webkit-user-select: text !important;
-            -moz-user-select: text !important;
-            -ms-user-select: text !important;
-            user-select: text !important;
-            cursor: text;
-        }
+        .selected-option { background-color: #e0f2fe !important; border: 2px solid #0ea5e9 !important; color: #0c4a6e !important; font-weight: 700; }
+        .text-content-style { text-align: justify; text-justify: inter-word; -webkit-user-select: text !important; user-select: text !important; cursor: text; }
         
+        /* Loader Overlay */
+        #loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #f1f5f9; z-index: 50; display: flex; flex-direction: column; justify-content: center; align-items: center; }
         #loader { border-top-color: #4f46e5; -webkit-animation: spinner 1s linear infinite; animation: spinner 1s linear infinite; }
         @keyframes spinner { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body class="min-h-screen p-2 sm:p-6 flex flex-col items-center justify-center">
 
-    <!-- CONTENEDOR PRINCIPAL -->
-    <div id="app" class="w-full max-w-6xl bg-slate-50 rounded-2xl shadow-2xl p-6 sm:p-10 relative min-h-[600px] border border-slate-300">
+    <!-- PANTALLA DE CARGA AUTOMÁTICA -->
+    <div id="loading-overlay">
+        <div id="loader" class="ease-linear rounded-full border-4 border-t-4 border-slate-300 h-16 w-16 mb-6"></div>
+        <h2 class="text-3xl font-bold text-slate-800 mb-2">Conectando con la Base de Datos...</h2>
+        <p class="text-slate-500 text-lg">Descargando preguntas actualizadas de la nube</p>
+        <p id="loading-error-msg" class="text-rose-600 font-bold mt-6 hidden max-w-md text-center px-4"></p>
+        <!-- Botón de rescate manual si falla la nube -->
+        <button id="manual-load-btn" onclick="showManualUpload()" class="mt-6 hidden bg-slate-600 text-white py-2 px-6 rounded-lg font-bold hover:bg-slate-700 transition">
+            Cargar archivo manualmente
+        </button>
+    </div>
+
+    <!-- PANTALLA DE SUBIDA MANUAL (OCULTA POR DEFECTO, SOLO ERROR) -->
+    <div id="upload-screen" class="hidden w-full max-w-4xl bg-white rounded-2xl shadow-2xl p-10 text-center relative z-10">
+        <div class="mb-8">
+            <div class="bg-rose-100 p-6 rounded-full inline-block mb-6">
+                <i class="fa-solid fa-cloud-slash text-6xl text-rose-600"></i>
+            </div>
+            <h2 class="text-3xl font-bold text-slate-800 mb-2">Modo Manual</h2>
+            <p class="text-slate-500">No se pudo conectar con la nube. Por favor, selecciona tu archivo <strong>BBDD.xlsx</strong>.</p>
+        </div>
+        <label class="cursor-pointer bg-indigo-600 text-white font-bold py-4 px-10 rounded-xl shadow-lg hover:bg-indigo-700 transition transform hover:-translate-y-1 inline-block text-lg">
+            <i class="fa-solid fa-folder-open mr-3"></i> SELECCIONAR ARCHIVO
+            <input type="file" id="excel-input" accept=".xlsx, .xls" class="hidden" onchange="handleFile(this)">
+        </label>
+    </div>
+
+    <!-- CONTENEDOR PRINCIPAL DE LA APP (Oculto hasta cargar datos) -->
+    <div id="app" class="hidden w-full max-w-6xl bg-slate-50 rounded-2xl shadow-2xl p-6 sm:p-10 relative min-h-[600px] border border-slate-300">
         
         <!-- CABECERA -->
         <div id="app-header" class="flex items-center justify-between mb-8 border-b border-slate-200 pb-6 relative">
-            <div class="flex-shrink-0 mr-6 cursor-pointer transition-transform hover:scale-105 active:scale-95" onclick="goToMenuIfLoaded()" title="Volver al Menú">
-                <img src="logoRFEF.png" 
-                     alt="RFEF" 
-                     class="h-24 w-auto object-contain drop-shadow-sm" 
-                     onerror="this.style.display='none'; document.getElementById('logo-fallback').style.display='block'">
+            <div class="flex-shrink-0 mr-6 cursor-pointer transition-transform hover:scale-105 active:scale-95" onclick="showMenu()" title="Volver al Menú">
+                <img src="logoRFEF.png" alt="RFEF" class="h-24 w-auto object-contain drop-shadow-sm" onerror="this.style.display='none'; document.getElementById('logo-fallback').style.display='block'">
                 <div id="logo-fallback" class="hidden text-3xl font-black text-slate-800 border-4 border-slate-800 p-2 rounded tracking-tighter">RFEF</div>
             </div>
-            
             <div class="text-right flex-grow">
-                <h1 class="text-2xl sm:text-4xl font-extrabold text-slate-800 leading-tight tracking-tight">
-                    EXAMEN REGLAMENTO RFEF
-                </h1>
+                <h1 class="text-2xl sm:text-4xl font-extrabold text-slate-800 leading-tight tracking-tight">EXAMEN REGLAMENTO RFEF</h1>
                 <p class="text-xl sm:text-2xl font-bold text-indigo-600 mt-1">2025-2026</p>
             </div>
-
-            <button id="home-button" onclick="goToMenuIfLoaded()" class="hidden text-slate-400 hover:text-indigo-600 transition-colors ml-6" title="Volver al Menú">
+            <button id="home-button" onclick="showMenu()" class="hidden text-slate-400 hover:text-indigo-600 transition-colors ml-6" title="Volver al Menú">
                 <i class="fa-solid fa-house fa-2x"></i>
             </button>
         </div>
 
-        <!-- PANTALLA 1: CARGAR EXCEL -->
-        <div id="upload-screen" class="text-center py-16 fade-in">
-            <div class="mb-10">
-                <div class="bg-emerald-100 p-6 rounded-full inline-block mb-6 shadow-inner">
-                    <i class="fa-solid fa-file-excel text-6xl text-emerald-600"></i>
-                </div>
-                <h2 class="text-3xl font-bold text-slate-800 mb-3">Cargar Base de Datos</h2>
-                <p class="text-slate-500 text-lg">Selecciona tu archivo <strong>BBDD.xlsx</strong> para comenzar.</p>
-            </div>
-
-            <label class="cursor-pointer bg-indigo-600 text-white font-bold py-4 px-10 rounded-xl shadow-lg hover:bg-indigo-700 transition transform hover:-translate-y-1 inline-block text-lg">
-                <i class="fa-solid fa-folder-open mr-3"></i> SELECCIONAR ARCHIVO EXCEL
-                <input type="file" id="excel-input" accept=".xlsx, .xls" class="hidden" onchange="handleFile(this)">
-            </label>
-            
-            <div id="parsing-status" class="mt-8 hidden">
-                <div id="loader" class="ease-linear rounded-full border-4 border-t-4 border-slate-300 h-12 w-12 mb-4 mx-auto"></div>
-                <p class="text-indigo-600 font-semibold animate-pulse">Procesando preguntas...</p>
-            </div>
-            <p id="error-msg" class="text-rose-600 font-bold mt-6 hidden bg-rose-50 p-4 rounded-lg border border-rose-200"></p>
-        </div>
-
         <!-- PANTALLA 2: MENÚ PRINCIPAL -->
-        <div id="menu-screen" class="hidden fade-in">
-            
-            <!-- SECCIÓN 1: REGLAS -->
-            <div class="flex justify-between items-end mb-4 border-l-4 border-indigo-500 pl-4">
-                <h2 class="text-xl font-bold text-slate-700 uppercase tracking-wide">REGLAS DE JUEGO:</h2>
-                <span id="total-questions-badge" class="text-xs bg-slate-200 text-slate-600 px-3 py-1 rounded-full font-medium"></span>
-            </div>
-            <div id="rule-menu" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mb-10">
-                <!-- Se rellena dinámicamente -->
-            </div>
-
-            <!-- SECCIÓN 2: EXÁMENES ESPECIALES (ARRIBA) -->
-            <div class="pt-6 border-t border-slate-200 mb-10">
+        <div id="menu-screen" class="fade-in">
+            <!-- SECCIÓN 1: EXÁMENES ESPECIALES -->
+            <div class="mb-10">
                 <h2 class="text-xl font-bold text-slate-700 mb-6 uppercase tracking-wide border-l-4 border-purple-600 pl-4">
                     EXÁMENES ESPECIALES:
                 </h2>
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    
-                    <!-- PRIORITARIOS -->
                     <button onclick="startTest('hardcore')" class="btn-rule bg-amber-400 text-white p-5 rounded-xl font-bold shadow-md hover:bg-amber-500 text-lg flex items-center justify-between group">
                         <span class="drop-shadow-sm">EXAMEN HARDCORE</span>
                         <span id="count-hardcore" class="text-xs bg-black bg-opacity-20 px-2 py-1 rounded ml-2 font-mono"></span>
                         <i class="fa-solid fa-skull text-amber-700 group-hover:text-white opacity-60 group-hover:opacity-100 transition ml-auto text-xl"></i>
                     </button>
-
                     <button onclick="startTest('escribir')" class="btn-rule bg-sky-500 text-white p-5 rounded-xl font-bold shadow-md hover:bg-sky-600 text-lg flex items-center justify-between group">
                         <span class="drop-shadow-sm">EXAMEN ESCRIBIR</span>
                         <span id="count-escribir" class="text-xs bg-black bg-opacity-20 px-2 py-1 rounded ml-2 font-mono"></span>
                         <i class="fa-solid fa-pen-to-square text-sky-800 group-hover:text-white opacity-60 group-hover:opacity-100 transition ml-auto text-xl"></i>
                     </button>
-
                     <button onclick="startTest('actas')" class="btn-rule bg-teal-500 text-white p-5 rounded-xl font-bold shadow-md hover:bg-teal-600 flex justify-between items-center">
                         <span class="drop-shadow-sm">EXAMEN ACTAS</span>
                         <span id="count-actas" class="text-xs bg-black bg-opacity-20 px-2 py-1 rounded font-mono"></span>
                     </button>
-                    
                     <button onclick="startTest('reanudaciones')" class="btn-rule bg-cyan-500 text-white p-5 rounded-xl font-bold shadow-md hover:bg-cyan-600 flex justify-between items-center">
                         <span class="drop-shadow-sm">EXAMEN REANUDACIONES</span>
                         <span id="count-reanudaciones" class="text-xs bg-black bg-opacity-20 px-2 py-1 rounded font-mono"></span>
                     </button>
-
                     <button onclick="startTest('roc')" class="btn-rule bg-orange-500 text-white p-5 rounded-xl font-bold shadow-md hover:bg-orange-600 flex justify-between items-center">
                         <span class="drop-shadow-sm">EXAMEN R-O-C</span>
                         <span id="count-roc" class="text-xs bg-black bg-opacity-20 px-2 py-1 rounded font-mono"></span>
                     </button>
-
                     <button onclick="startTest('mixto')" class="btn-rule bg-purple-500 text-white p-5 rounded-xl font-bold shadow-md hover:bg-purple-600 flex items-center justify-between">
                         <span class="drop-shadow-sm">EXAMEN MIXTO INFINITO</span>
                         <i class="fa-solid fa-infinity opacity-50"></i>
                     </button>
-                    
                     <button onclick="startTest('examen_30')" class="btn-rule bg-rose-500 text-white p-5 rounded-xl font-bold shadow-md hover:bg-rose-600 flex items-center justify-between">
                         <span class="drop-shadow-sm">EXAMEN DE 30</span>
                         <span class="text-xs bg-black bg-opacity-20 px-2 py-1 rounded font-mono">30</span>
                     </button>
+                    <button onclick="startTest('ingles')" class="btn-rule bg-indigo-500 text-white p-5 rounded-xl font-bold shadow-md hover:bg-indigo-600 flex justify-between items-center">
+                        <span class="drop-shadow-sm">EXAMEN INGLÉS</span>
+                        <span id="count-ingles" class="text-xs bg-black bg-opacity-20 px-2 py-1 rounded font-mono"></span>
+                    </button>
+                    <button onclick="startTest('estatutos')" class="btn-rule bg-slate-600 text-white p-5 rounded-xl font-bold shadow-md hover:bg-slate-700 flex justify-between items-center">
+                        <span class="drop-shadow-sm">EXAMEN ESTATUTOS</span>
+                        <span id="count-estatutos" class="text-xs bg-black bg-opacity-20 px-2 py-1 rounded font-mono"></span>
+                    </button>
                 </div>
             </div>
 
-            <!-- SECCIÓN 3: EXÁMENES OFICIALES (ABAJO) -->
-            <div class="pt-6 border-t border-slate-200">
+            <!-- SECCIÓN 2: EXÁMENES OFICIALES -->
+            <div class="mb-10 border-t border-slate-200 pt-6">
                 <h2 class="text-xl font-bold text-slate-700 mb-6 uppercase tracking-wide border-l-4 border-emerald-500 pl-4">
                     EXÁMENES OFICIALES:
                 </h2>
                 <div id="official-exams-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    <!-- Examen II -->
                     <button onclick="startTest('ex2425')" class="btn-rule bg-emerald-600 text-white p-5 rounded-xl font-bold shadow-md hover:bg-emerald-700 flex justify-between items-center">
                         <span class="drop-shadow-sm">EXAMEN II 2024-2025</span>
                         <span id="count-ex2425" class="text-xs bg-black bg-opacity-20 px-2 py-1 rounded font-mono"></span>
                     </button>
-                    
-                    <!-- Examen I -->
                     <button onclick="startTest('ex2526')" class="btn-rule bg-emerald-500 text-white p-5 rounded-xl font-bold shadow-md hover:bg-emerald-600 flex justify-between items-center">
                         <span class="drop-shadow-sm">EXAMEN I 2025-2026</span>
                         <span id="count-ex2526" class="text-xs bg-black bg-opacity-20 px-2 py-1 rounded font-mono"></span>
                     </button>
+                </div>
+            </div>
 
-                    <!-- AQUÍ SE INSERTARÁN LOS DINÁMICOS (COLUMNA N) -->
+            <!-- SECCIÓN 3: REGLAS -->
+            <div class="border-t border-slate-200 pt-6">
+                <div class="flex justify-between items-end mb-4 border-l-4 border-indigo-500 pl-4">
+                    <h2 class="text-xl font-bold text-slate-700 uppercase tracking-wide">REGLAS DE JUEGO:</h2>
+                    <span id="total-questions-badge" class="text-xs bg-slate-200 text-slate-600 px-3 py-1 rounded-full font-medium"></span>
+                </div>
+                <div id="rule-menu" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                    <!-- Se rellena dinámicamente -->
                 </div>
             </div>
         </div>
@@ -180,7 +157,6 @@
         <!-- PANTALLA 3: CUESTIONARIO -->
         <div id="quiz-screen" class="hidden relative fade-in">
             <h2 id="quiz-title" class="text-2xl font-bold text-slate-700 mb-6 border-b border-slate-200 pb-4 pr-10"></h2>
-            
             <div id="question-container" class="space-y-6">
                 <div id="question-box" class="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
                     <div class="flex justify-between items-center mb-4">
@@ -189,44 +165,26 @@
                     </div>
                     <p id="question-text" class="text-xl sm:text-2xl font-medium text-slate-800 leading-relaxed text-content-style"></p>
                 </div>
-                
                 <div id="options-container" class="space-y-4"></div>
             </div>
-
             <div class="mt-10">
-                <button id="confirm-button" onclick="confirmAnswer()" class="w-full bg-emerald-600 text-white p-5 rounded-xl font-bold text-xl shadow-lg hover:bg-emerald-700 transition duration-150 hidden disabled:opacity-50 disabled:cursor-not-allowed tracking-widest uppercase transform active:scale-[0.99]">
-                    CONFIRMAR
-                </button>
-                <button id="next-button" onclick="nextQuestion()" class="w-full bg-indigo-600 text-white p-5 rounded-xl font-bold text-xl shadow-lg hover:bg-indigo-700 transition duration-150 hidden tracking-widest uppercase transform active:scale-[0.99]">
-                    SIGUIENTE
-                </button>
+                <button id="confirm-button" onclick="confirmAnswer()" class="w-full bg-emerald-600 text-white p-5 rounded-xl font-bold text-xl shadow-lg hover:bg-emerald-700 transition duration-150 hidden disabled:opacity-50 disabled:cursor-not-allowed tracking-widest uppercase transform active:scale-[0.99]">CONFIRMAR</button>
+                <button id="next-button" onclick="nextQuestion()" class="w-full bg-indigo-600 text-white p-5 rounded-xl font-bold text-xl shadow-lg hover:bg-indigo-700 transition duration-150 hidden tracking-widest uppercase transform active:scale-[0.99]">SIGUIENTE</button>
             </div>
         </div>
 
         <!-- PANTALLA 4: RESULTADOS -->
         <div id="results-screen" class="hidden text-center mt-8 p-10 bg-white rounded-2xl shadow-xl border border-slate-100 fade-in">
             <div class="mb-8" id="result-icon-container"></div>
-            
-            <div class="mb-4">
-                <h2 id="result-title" class="text-4xl font-black text-slate-800 tracking-tight uppercase"></h2>
-            </div>
-            
+            <div class="mb-4"><h2 id="result-title" class="text-4xl font-black text-slate-800 tracking-tight uppercase"></h2></div>
             <div class="bg-slate-50 p-8 rounded-2xl shadow-inner mb-10 max-w-md mx-auto border border-slate-200">
                 <p id="final-score" class="text-5xl font-black text-slate-800"></p>
             </div>
-            
             <div id="results-actions" class="grid grid-cols-1 sm:grid-cols-3 gap-5 max-w-4xl mx-auto">
-                <button id="repeat-quiz-button" onclick="repeatCurrentTest()" class="btn-rule bg-indigo-600 text-white p-4 rounded-xl font-bold shadow hover:bg-indigo-700">
-                    REPETIR EXAMEN
-                </button>
-                <button id="retry-fallos-button" onclick="startTest('retry_fallos')" class="btn-rule bg-rose-600 text-white p-4 rounded-xl font-bold shadow hover:bg-rose-700 hidden">
-                    REINTENTAR FALLOS
-                </button>
-                <button onclick="showMenu()" class="btn-rule bg-slate-600 text-white p-4 rounded-xl font-bold shadow hover:bg-slate-700">
-                    MENÚ PRINCIPAL
-                </button>
+                <button id="repeat-quiz-button" onclick="repeatCurrentTest()" class="btn-rule bg-indigo-600 text-white p-4 rounded-xl font-bold shadow hover:bg-indigo-700">REPETIR EXAMEN</button>
+                <button id="retry-fallos-button" onclick="startTest('retry_fallos')" class="btn-rule bg-rose-600 text-white p-4 rounded-xl font-bold shadow hover:bg-rose-700 hidden">REINTENTAR FALLOS</button>
+                <button onclick="showMenu()" class="btn-rule bg-slate-600 text-white p-4 rounded-xl font-bold shadow hover:bg-slate-700">MENÚ PRINCIPAL</button>
             </div>
-            
             <div id="review-fallos-container" class="mt-12 border-t border-slate-200 pt-8 hidden text-left max-w-4xl mx-auto">
                  <h3 class="text-xl font-bold text-rose-600 mb-6 flex items-center bg-rose-50 p-4 rounded-xl border border-rose-100">
                     <i class="fa-solid fa-circle-exclamation mr-3"></i> Preguntas falladas:
@@ -234,40 +192,31 @@
                  <div id="review-fallos" class="space-y-6"></div>
             </div>
         </div>
-
     </div>
 
     <script>
+        // !!! IMPORTANTE !!!
+        // CAMBIA ESTA URL POR LA DE TU ARCHIVO EN GITHUB (BOTÓN RAW)
+        // Ejemplo: https://raw.githubusercontent.com/TuUsuario/TuRepo/main/BBDD.xlsx
+        const GITHUB_EXCEL_URL = "https://raw.githubusercontent.com/TU_USUARIO/TU_REPOSITORIO/main/BBDD.xlsx"; 
+
         let database = {}; 
         let officialExams = {}; 
         let dbLoaded = false;
 
         const SHEET_MAPPING = {
-            'Regla1': 'Regla1', 'Regla 1': 'Regla1',
-            'Regla2': 'Regla2', 'Regla 2': 'Regla2',
-            'Regla3': 'Regla3', 'Regla 3': 'Regla3',
-            'Regla4': 'Regla4', 'Regla 4': 'Regla4',
-            'Regla5': 'Regla5', 'Regla 5': 'Regla5',
-            'Regla6': 'Regla6', 'Regla 6': 'Regla6',
-            'Regla7': 'Regla7', 'Regla 7': 'Regla7',
-            'Regla8': 'Regla8', 'Regla 8': 'Regla8',
-            'Regla9': 'Regla9', 'Regla 9': 'Regla9',
-            'Regla10': 'Regla10', 'Regla 10': 'Regla10',
-            'Regla11': 'Regla11', 'Regla 11': 'Regla11',
-            'Regla12': 'Regla12', 'Regla 12': 'Regla12',
-            'Regla13': 'Regla13', 'Regla 13': 'Regla13',
-            'Regla14': 'Regla14', 'Regla 14': 'Regla14',
-            'Regla15': 'Regla15', 'Regla 15': 'Regla15',
-            'Regla16': 'Regla16', 'Regla 16': 'Regla16',
+            'Regla1': 'Regla1', 'Regla 1': 'Regla1', 'Regla2': 'Regla2', 'Regla 2': 'Regla2',
+            'Regla3': 'Regla3', 'Regla 3': 'Regla3', 'Regla4': 'Regla4', 'Regla 4': 'Regla4',
+            'Regla5': 'Regla5', 'Regla 5': 'Regla5', 'Regla6': 'Regla6', 'Regla 6': 'Regla6',
+            'Regla7': 'Regla7', 'Regla 7': 'Regla7', 'Regla8': 'Regla8', 'Regla 8': 'Regla8',
+            'Regla9': 'Regla9', 'Regla 9': 'Regla9', 'Regla10': 'Regla10', 'Regla 10': 'Regla10',
+            'Regla11': 'Regla11', 'Regla 11': 'Regla11', 'Regla12': 'Regla12', 'Regla 12': 'Regla12',
+            'Regla13': 'Regla13', 'Regla 13': 'Regla13', 'Regla14': 'Regla14', 'Regla 14': 'Regla14',
+            'Regla15': 'Regla15', 'Regla 15': 'Regla15', 'Regla16': 'Regla16', 'Regla 16': 'Regla16',
             'Regla17': 'Regla17', 'Regla 17': 'Regla17',
-            'Escribir': 'escribir',
-            'Examenes': 'hardcore', 
-            'Actas': 'actas',
-            'Reanudaciones': 'reanudaciones',
-            'ExamenII': 'ex2425',
-            'ExamenI': 'ex2526',
-            'R-O-C': 'roc',
-            'Roc': 'roc'
+            'Escribir': 'escribir', 'Examenes': 'hardcore', 'Actas': 'actas',
+            'Reanudaciones': 'reanudaciones', 'ExamenII': 'ex2425', 'ExamenI': 'ex2526',
+            'R-O-C': 'roc', 'Roc': 'roc', 'Inglés': 'ingles', 'Ingles': 'ingles', 'Estatutos': 'estatutos'
         };
 
         const ruleReferences = [
@@ -282,98 +231,133 @@
             { title: "EL SAQUE DE ESQUINA", ref: "2" }
         ];
 
+        // --- INICIO AUTOMÁTICO ---
+        window.onload = function() {
+            initRulesMenu();
+            // Intentar cargar desde la nube automáticamente
+            fetchDatabase(GITHUB_EXCEL_URL);
+        };
+
+        function fetchDatabase(url) {
+            // Añadimos timestamp para evitar caché
+            const nocacheUrl = url + '?t=' + new Date().getTime();
+            
+            fetch(nocacheUrl)
+                .then(res => {
+                    if(!res.ok) throw new Error("No se pudo descargar el archivo (Error " + res.status + ")");
+                    return res.arrayBuffer();
+                })
+                .then(data => processExcelData(data))
+                .catch(err => {
+                    console.warn("Fallo carga automática:", err);
+                    // Si falla, mostrar error y botón manual
+                    const errorEl = document.getElementById('loading-error-msg');
+                    errorEl.textContent = "⚠️ No se pudo conectar con la nube. " + err.message;
+                    errorEl.classList.remove('hidden');
+                    document.getElementById('manual-load-btn').classList.remove('hidden');
+                });
+        }
+
+        // Fallback Manual
+        function showManualUpload() {
+            document.getElementById('loading-overlay').classList.add('hidden');
+            document.getElementById('upload-screen').classList.remove('hidden');
+        }
+
         function handleFile(input) {
             const file = input.files[0];
             if (!file) return;
-
-            document.getElementById('parsing-status').classList.remove('hidden');
-            document.getElementById('error-msg').classList.add('hidden');
-
             const reader = new FileReader();
-            reader.onload = function(e) {
-                try {
-                    const data = new Uint8Array(e.target.result);
-                    const workbook = XLSX.read(data, {type: 'array'});
-                    let totalQuestions = 0;
-                    
-                    database = {};
-                    officialExams = {};
-
-                    workbook.SheetNames.forEach(sheetName => {
-                        const sheet = workbook.Sheets[sheetName];
-                        const jsonData = XLSX.utils.sheet_to_json(sheet, {header: 1});
-                        
-                        let internalKey = sheetName; 
-                        const cleanName = sheetName.replace(/\(\d+\)/g, '').trim(); 
-                        for (const [key, val] of Object.entries(SHEET_MAPPING)) {
-                            if (cleanName.toLowerCase().includes(key.toLowerCase())) {
-                                internalKey = val;
-                                break;
-                            }
-                        }
-
-                        let currentOfficialExamKey = null;
-
-                        const questions = [];
-                        for (let i = 1; i < jsonData.length; i++) {
-                            const row = jsonData[i];
-                            
-                            // PARSER DE EXÁMENES OFICIALES EN HOJA HARDCORE (Columna N)
-                            if (internalKey === 'hardcore') {
-                                const colN = row[13]; // Col N
-                                if (colN !== undefined && colN !== null) {
-                                    const colNStr = colN.toString().trim();
-                                    // Si es texto (Título)
-                                    if (colNStr.length > 0 && isNaN(colNStr)) {
-                                        currentOfficialExamKey = colNStr;
-                                        if (!officialExams[currentOfficialExamKey]) officialExams[currentOfficialExamKey] = [];
-                                    }
-                                } else if (row[0]) {
-                                    // Si hay pregunta pero Col N vacía -> fin de bloque oficial
-                                    currentOfficialExamKey = null;
-                                }
-                            }
-
-                            if (row[0] && row[11]) { 
-                                const qText = row[0].toString().trim();
-                                const options = [];
-                                const numOpts = parseInt(row[12]) || 0;
-                                const correctVal = row[11].toString().trim();
-                                const comment = row[10] ? row[10].toString().trim() : null;
-
-                                for (let k = 1; k <= 10; k++) {
-                                    if (row[k] !== undefined && row[k] !== null) options.push(row[k].toString().trim());
-                                }
-                                
-                                const qObj = { q: qText, o: options, a: correctVal, n: numOpts, c: comment };
-                                questions.push(qObj);
-
-                                if (internalKey === 'hardcore' && currentOfficialExamKey) {
-                                    officialExams[currentOfficialExamKey].push(qObj);
-                                }
-                            }
-                        }
-                        
-                        if (!database[internalKey]) database[internalKey] = [];
-                        database[internalKey].push(...questions);
-                        totalQuestions += questions.length;
-                    });
-
-                    if (totalQuestions === 0) throw new Error("No se encontraron preguntas válidas.");
-                    dbLoaded = true;
-                    document.getElementById('total-questions-badge').textContent = `Total: ${totalQuestions}`;
-                    updateMenuCounts();
-                    renderOfficialExamsButtons();
-                    showScreen('menu-screen');
-                } catch (err) {
-                    console.error(err);
-                    document.getElementById('parsing-status').classList.add('hidden');
-                    const errEl = document.getElementById('error-msg');
-                    errEl.textContent = "Error al leer el archivo: " + err.message;
-                    errEl.classList.remove('hidden');
-                }
-            };
+            reader.onload = (e) => processExcelData(e.target.result);
             reader.readAsArrayBuffer(file);
+        }
+
+        function processExcelData(data) {
+            try {
+                const workbook = XLSX.read(data, {type: 'array'});
+                let totalQuestions = 0;
+                database = {};
+                officialExams = {};
+
+                workbook.SheetNames.forEach(sheetName => {
+                    const sheet = workbook.Sheets[sheetName];
+                    const jsonData = XLSX.utils.sheet_to_json(sheet, {header: 1});
+                    
+                    let internalKey = sheetName; 
+                    const cleanName = sheetName.replace(/\(\d+\)/g, '').trim(); 
+                    for (const [key, val] of Object.entries(SHEET_MAPPING)) {
+                        if (cleanName.toLowerCase().includes(key.toLowerCase())) {
+                            internalKey = val;
+                            break;
+                        }
+                    }
+
+                    let currentOfficialExamKey = null;
+                    const questions = [];
+
+                    for (let i = 1; i < jsonData.length; i++) {
+                        const row = jsonData[i];
+                        
+                        // PARSER DINÁMICO (Col N)
+                        if (internalKey === 'hardcore') {
+                            const colN = row[13];
+                            if (colN !== undefined && colN !== null) {
+                                const colNStr = colN.toString().trim();
+                                if (colNStr.length > 0 && isNaN(colNStr)) {
+                                    currentOfficialExamKey = colNStr;
+                                    if (!officialExams[currentOfficialExamKey]) officialExams[currentOfficialExamKey] = [];
+                                } else if (colNStr === "") {
+                                     if (row[0]) currentOfficialExamKey = null; 
+                                }
+                            } else if (row[0]) {
+                                currentOfficialExamKey = null;
+                            }
+                        }
+
+                        if (row[0] && row[11]) { 
+                            const qText = row[0].toString().trim();
+                            const options = [];
+                            const numOpts = parseInt(row[12]) || 0;
+                            const correctVal = row[11].toString().trim();
+                            const comment = row[10] ? row[10].toString().trim() : null;
+
+                            for (let k = 1; k <= 10; k++) {
+                                if (row[k] !== undefined && row[k] !== null) options.push(row[k].toString().trim());
+                            }
+                            
+                            const qObj = { q: qText, o: options, a: correctVal, n: numOpts, c: comment };
+                            questions.push(qObj);
+
+                            if (internalKey === 'hardcore' && currentOfficialExamKey) {
+                                officialExams[currentOfficialExamKey].push(qObj);
+                            }
+                        }
+                    }
+                    
+                    if (!database[internalKey]) database[internalKey] = [];
+                    database[internalKey].push(...questions);
+                    totalQuestions += questions.length;
+                });
+
+                if (totalQuestions === 0) throw new Error("Archivo vacío o sin formato válido");
+
+                dbLoaded = true;
+                // Ocultar pantallas de carga y mostrar App
+                document.getElementById('loading-overlay').classList.add('hidden');
+                document.getElementById('upload-screen').classList.add('hidden');
+                document.getElementById('app').classList.remove('hidden');
+
+                document.getElementById('total-questions-badge').textContent = `Total: ${totalQuestions}`;
+                updateMenuCounts();
+                renderOfficialExamsButtons();
+                showScreen('menu-screen');
+
+            } catch (err) {
+                console.error(err);
+                alert("Error al procesar los datos: " + err.message);
+                // Si falla carga auto, ir a manual
+                showManualUpload();
+            }
         }
 
         function updateMenuCounts() {
@@ -389,11 +373,30 @@
             updateBadge('count-ex2425', 'ex2425');
             updateBadge('count-ex2526', 'ex2526');
             updateBadge('count-roc', 'roc');
+            updateBadge('count-ingles', 'ingles');
+            updateBadge('count-estatutos', 'estatutos');
         }
 
         function renderOfficialExamsButtons() {
             const container = document.getElementById('official-exams-container');
-            // Añadimos los dinámicos a continuación de I y II
+            // Borrar solo si es necesario, pero mantenemos I y II
+            container.innerHTML = '';
+
+            // Fijos
+            const fixed = [
+                {id: 'ex2425', name: 'EXAMEN II 2024-2025', bg: 'bg-emerald-600', h: 'bg-emerald-700'},
+                {id: 'ex2526', name: 'EXAMEN I 2025-2026', bg: 'bg-emerald-500', h: 'bg-emerald-600'}
+            ];
+            fixed.forEach(ex => {
+                const count = database[ex.id] ? database[ex.id].length : 0;
+                const btn = document.createElement('button');
+                btn.className = `btn-rule ${ex.bg} text-white p-5 rounded-xl font-bold shadow-md hover:${ex.h} flex justify-between items-center`;
+                btn.onclick = () => startTest(ex.id);
+                btn.innerHTML = `<span class="drop-shadow-sm">${ex.name}</span><span class="text-xs bg-black bg-opacity-20 px-2 py-1 rounded font-mono">${count}</span>`;
+                container.appendChild(btn);
+            });
+
+            // Dinámicos
             for (const [examTitle, questions] of Object.entries(officialExams)) {
                 if (questions.length > 0) {
                     const btn = document.createElement('button');
@@ -408,15 +411,27 @@
             }
         }
 
-        let currentQuiz = [];
-        let currentQuestionIndex = 0;
-        let score = 0;
-        let fallos = [];
-        let quizMode = '';
-        let quizParam = null;
-        let lastQuizMode = '';
-        let lastQuizParam = null;
-        let selectedAnswer = null;
+        function initRulesMenu() {
+            const menu = document.getElementById('rule-menu');
+            menu.innerHTML = '';
+            ruleReferences.forEach((r, i) => {
+                const btn = document.createElement('button');
+                btn.className = 'btn-rule p-5 rounded-xl bg-white border border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-300 text-left group transition-all';
+                btn.onclick = () => startTest('regla', i + 1);
+                btn.innerHTML = `
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="font-black text-xl text-slate-700 group-hover:text-indigo-700">REGLA ${i+1}</span>
+                        <span class="text-xs font-bold bg-slate-100 text-slate-500 px-2 py-1 rounded border border-slate-200 group-hover:bg-indigo-50 group-hover:text-indigo-600 group-hover:border-indigo-100">${r.ref}</span>
+                    </div>
+                    <div class="text-xs font-bold text-slate-400 uppercase tracking-widest group-hover:text-slate-600">${r.title}</div>
+                `;
+                menu.appendChild(btn);
+            });
+        }
+
+        // LÓGICA DE TEST
+        let currentQuiz = [], currentQuestionIndex = 0, score = 0, fallos = [], quizMode = '', quizParam = null;
+        let lastQuizMode = '', lastQuizParam = null, selectedAnswer = null;
         const optionLetters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
 
         function getRandomInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
@@ -426,8 +441,7 @@
             if (!pool && key.startsWith('Regla')) pool = database[key] || database[key.replace('Regla', 'Regla ')] || [];
             if (!pool || pool.length === 0) return [];
             
-            // SI SE PIDE 9999 (TODAS), RETORNAMOS TODO EL ARRAY MEZCLADO
-            if (k === 9999) {
+            if (k === 9999) { // Shuffle all
                 const shuffled = [...pool];
                 for (let i = shuffled.length - 1; i > 0; i--) {
                     const j = getRandomInt(0, i);
@@ -435,7 +449,6 @@
                 }
                 return shuffled;
             }
-
             const actualK = Math.min(k, pool.length);
             const indices = Array.from({length: pool.length}, (_, i) => i);
             for (let i = indices.length - 1; i > 0; i--) {
@@ -454,34 +467,15 @@
         }
 
         function startTest(mode, param = null) {
-            currentQuiz = [];
-            currentQuestionIndex = 0;
-            score = 0;
-            selectedAnswer = null;
-            quizMode = mode;
-            quizParam = param;
+            currentQuiz = []; currentQuestionIndex = 0; score = 0; selectedAnswer = null;
+            quizMode = mode; quizParam = param;
+            if (mode !== 'retry_fallos') { lastQuizMode = mode; lastQuizParam = param; }
             
-            if (mode !== 'retry_fallos') {
-                lastQuizMode = mode;
-                lastQuizParam = param;
-            }
-            
-            let k = 10; 
-            let title = "";
-            let badge = mode.toUpperCase();
+            let title = ""; let badge = mode.toUpperCase();
 
-            if (mode === 'regla') {
-                title = `EXAMEN DE LA REGLA ${param}`;
-                currentQuiz = selectRandomQuestions(`Regla${param}`, 10);
-            } 
-            else if (mode === 'hardcore') {
-                title = "EXAMEN HARDCORE";
-                currentQuiz = selectRandomQuestions('hardcore', 10); 
-            }
-            else if (mode === 'escribir') {
-                title = "EXAMEN ESCRIBIR";
-                currentQuiz = selectRandomQuestions('escribir', 10);
-            }
+            if (mode === 'regla') { title = `EXAMEN DE LA REGLA ${param}`; currentQuiz = selectRandomQuestions(`Regla${param}`, 10); } 
+            else if (mode === 'hardcore') { title = "EXAMEN HARDCORE"; currentQuiz = selectRandomQuestions('hardcore', 10); }
+            else if (mode === 'escribir') { title = "EXAMEN ESCRIBIR"; currentQuiz = selectRandomQuestions('escribir', 10); }
             else if (mode === 'examen_30') {
                 title = "EXAMEN DE 30 PREGUNTAS";
                 const allQuestions = [];
@@ -492,26 +486,24 @@
                 }
                 currentQuiz = allQuestions.slice(0, 30);
             }
-            else if (mode === 'mixto') {
-                title = "EXAMEN MIXTO INFINITO";
-                currentQuiz.push(generateMixtoQuestion());
-            }
+            else if (mode === 'mixto') { title = "EXAMEN MIXTO INFINITO"; currentQuiz.push(generateMixtoQuestion()); }
             else if (mode === 'retry_fallos') {
                 if(fallos.length === 0) return showMenu();
-                title = "REINTENTO DE FALLOS";
-                badge = "REPASO"; 
-                currentQuiz = [...fallos].sort(() => Math.random() - 0.5);
-                fallos = [];
+                title = "REINTENTO DE FALLOS"; badge = "REPASO"; 
+                currentQuiz = [...fallos].sort(() => Math.random() - 0.5); fallos = [];
             }
-            // EXÁMENES COMPLETOS - SIN LÍMITE
+            // EXÁMENES SIN LÍMITE
             else if (['actas', 'reanudaciones', 'ex2425', 'ex2526', 'roc'].includes(mode)) {
                 title = `EXAMEN ${mode.toUpperCase()}`;
                 currentQuiz = selectRandomQuestions(mode, 9999);
             }
-            // EXAMENES OFICIALES DINÁMICOS - SIN LÍMITE
             else if (mode === 'official_dynamic') {
                 title = param; 
-                currentQuiz = [...officialExams[param]]; // Copia exacta
+                currentQuiz = [...officialExams[param]];
+            }
+            else if (mode === 'ingles' || mode === 'estatutos') { // Especiales con 10
+                title = `EXAMEN ${mode.toUpperCase()}`;
+                currentQuiz = selectRandomQuestions(mode, 10);
             }
             else {
                 title = `EXAMEN ${mode.toUpperCase()}`;
@@ -519,7 +511,7 @@
             }
 
             if (!currentQuiz || currentQuiz.length === 0) {
-                alert("No se encontraron preguntas para este modo en el Excel cargado.");
+                alert("No hay preguntas disponibles para este modo.");
                 return;
             }
 
@@ -679,19 +671,10 @@
             const total = quizMode === 'retry_fallos' ? 100 : currentQuiz.length; 
             const percent = quizMode === 'retry_fallos' ? 100 : (total > 0 ? Math.round((score/total)*100) : 0);
             
-            let iconHTML = '';
-            let titleText = '';
-            
-            if (percent === 100) {
-                iconHTML = '<i class="fa-solid fa-trophy text-8xl text-yellow-400 drop-shadow-lg animate-bounce"></i>';
-                titleText = "¡PLENO!";
-            } else if (percent >= 70) {
-                iconHTML = '<i class="fa-solid fa-medal text-8xl text-indigo-500 drop-shadow-lg"></i>'; 
-                titleText = "¡APROBADO!";
-            } else {
-                iconHTML = '<i class="fa-solid fa-circle-xmark text-8xl text-rose-600 drop-shadow-lg"></i>';
-                titleText = "SUSPENSO";
-            }
+            let iconHTML = '', titleText = '';
+            if (percent === 100) { iconHTML = '<i class="fa-solid fa-trophy text-8xl text-yellow-400 drop-shadow-lg animate-bounce"></i>'; titleText = "¡PLENO!"; } 
+            else if (percent >= 70) { iconHTML = '<i class="fa-solid fa-medal text-8xl text-indigo-500 drop-shadow-lg"></i>'; titleText = "¡APROBADO!"; } 
+            else { iconHTML = '<i class="fa-solid fa-circle-xmark text-8xl text-rose-600 drop-shadow-lg"></i>'; titleText = "SUSPENSO"; }
 
             document.getElementById('result-icon-container').innerHTML = iconHTML;
             document.getElementById('result-title').textContent = titleText;
@@ -704,13 +687,8 @@
             `;
 
             const rptBtn = document.getElementById('repeat-quiz-button');
-            if(quizMode === 'retry_fallos') {
-                rptBtn.textContent = "VOLVER AL MENÚ";
-                rptBtn.onclick = showMenu;
-            } else {
-                rptBtn.textContent = "REPETIR EXAMEN";
-                rptBtn.onclick = () => startTest(lastQuizMode, lastQuizParam);
-            }
+            if(quizMode === 'retry_fallos') { rptBtn.textContent = "VOLVER AL MENÚ"; rptBtn.onclick = showMenu; } 
+            else { rptBtn.textContent = "REPETIR EXAMEN"; rptBtn.onclick = () => startTest(lastQuizMode, lastQuizParam); }
 
             const list = document.getElementById('review-fallos');
             list.innerHTML = '';
@@ -720,11 +698,7 @@
                 fallos.forEach((f, i) => {
                     const div = document.createElement('div');
                     div.className = 'bg-white p-6 rounded-xl border-l-8 border-rose-500 shadow-sm hover:shadow-md transition-shadow';
-                    div.innerHTML = `
-                        <div class="font-bold text-slate-800 flex items-start text-lg text-content-style">
-                            <span class="text-rose-500 mr-3 font-black select-none">${i+1}.</span> ${f.q}
-                        </div>
-                    `;
+                    div.innerHTML = `<div class="font-bold text-slate-800 flex items-start text-lg text-content-style"><span class="text-rose-500 mr-3 font-black select-none">${i+1}.</span> ${f.q}</div>`;
                     list.appendChild(div);
                 });
             } else {
@@ -738,28 +712,10 @@
             ['upload-screen', 'menu-screen', 'quiz-screen', 'results-screen'].forEach(s => document.getElementById(s).classList.add('hidden'));
             document.getElementById(id).classList.remove('hidden');
             const homeBtn = document.getElementById('home-button');
-            if(id === 'quiz-screen' || id === 'results-screen') homeBtn.classList.remove('hidden');
-            else homeBtn.classList.add('hidden');
+            if(id === 'quiz-screen' || id === 'results-screen') homeBtn.classList.remove('hidden'); else homeBtn.classList.add('hidden');
         }
         function showMenu() { showScreen('menu-screen'); }
         function goToMenuIfLoaded() { if(dbLoaded) showMenu(); else showScreen('upload-screen'); }
-
-        window.onload = function() {
-            const menu = document.getElementById('rule-menu');
-            ruleReferences.forEach((r, i) => {
-                const btn = document.createElement('button');
-                btn.className = 'btn-rule p-5 rounded-xl bg-white border border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-300 text-left group transition-all';
-                btn.onclick = () => startTest('regla', i + 1);
-                btn.innerHTML = `
-                    <div class="flex justify-between items-center mb-2">
-                        <span class="font-black text-xl text-slate-700 group-hover:text-indigo-700">REGLA ${i+1}</span>
-                        <span class="text-xs font-bold bg-slate-100 text-slate-500 px-2 py-1 rounded border border-slate-200 group-hover:bg-indigo-50 group-hover:text-indigo-600 group-hover:border-indigo-100">${r.ref}</span>
-                    </div>
-                    <div class="text-xs font-bold text-slate-400 uppercase tracking-widest group-hover:text-slate-600">${r.title}</div>
-                `;
-                menu.appendChild(btn);
-            });
-        };
     </script>
 </body>
 </html>
