@@ -36,15 +36,18 @@
         <div id="loader" class="ease-linear rounded-full border-4 border-t-4 border-slate-300 h-16 w-16 mb-6"></div>
         <h2 class="text-3xl font-bold text-slate-800 mb-2">Conectando con la Base de Datos...</h2>
         <p class="text-slate-500 text-lg">Descargando preguntas actualizadas de la nube</p>
-        <p id="loading-error-msg" class="text-rose-600 font-bold mt-6 hidden max-w-md text-center px-4"></p>
-        <!-- Botón de rescate manual si falla la nube -->
-        <button id="manual-load-btn" onclick="showManualUpload()" class="mt-6 hidden bg-slate-600 text-white py-2 px-6 rounded-lg font-bold hover:bg-slate-700 transition">
-            Cargar archivo manualmente
-        </button>
+        
+        <!-- Mensaje de error y botón manual (solo aparecen si falla la nube) -->
+        <div id="error-container" class="hidden flex flex-col items-center mt-6 w-full max-w-md px-4">
+            <p id="loading-error-msg" class="text-rose-600 font-bold text-center mb-4 bg-rose-50 p-3 rounded border border-rose-200"></p>
+            <button onclick="showManualUpload()" class="bg-slate-600 text-white py-3 px-6 rounded-xl font-bold hover:bg-slate-700 transition shadow-lg">
+                <i class="fa-solid fa-folder-open mr-2"></i> Cargar archivo localmente
+            </button>
+        </div>
     </div>
 
-    <!-- PANTALLA DE SUBIDA MANUAL (OCULTA POR DEFECTO, SOLO ERROR) -->
-    <div id="upload-screen" class="hidden w-full max-w-4xl bg-white rounded-2xl shadow-2xl p-10 text-center relative z-10">
+    <!-- PANTALLA DE SUBIDA MANUAL (Respaldo) -->
+    <div id="upload-screen" class="hidden w-full max-w-4xl bg-white rounded-2xl shadow-2xl p-10 text-center relative z-10 fade-in border border-slate-200">
         <div class="mb-8">
             <div class="bg-rose-100 p-6 rounded-full inline-block mb-6">
                 <i class="fa-solid fa-cloud-slash text-6xl text-rose-600"></i>
@@ -58,8 +61,8 @@
         </label>
     </div>
 
-    <!-- CONTENEDOR PRINCIPAL DE LA APP (Oculto hasta cargar datos) -->
-    <div id="app" class="hidden w-full max-w-6xl bg-slate-50 rounded-2xl shadow-2xl p-6 sm:p-10 relative min-h-[600px] border border-slate-300">
+    <!-- CONTENEDOR PRINCIPAL DE LA APP -->
+    <div id="app" class="hidden w-full max-w-6xl bg-slate-50 rounded-2xl shadow-2xl p-6 sm:p-10 relative min-h-[600px] border border-slate-300 fade-in">
         
         <!-- CABECERA -->
         <div id="app-header" class="flex items-center justify-between mb-8 border-b border-slate-200 pb-6 relative">
@@ -195,10 +198,9 @@
     </div>
 
     <script>
-        // !!! IMPORTANTE !!!
-        // CAMBIA ESTA URL POR LA DE TU ARCHIVO EN GITHUB (BOTÓN RAW)
-        // Ejemplo: https://raw.githubusercontent.com/TuUsuario/TuRepo/main/BBDD.xlsx
-        const GITHUB_EXCEL_URL = "https://raw.diegofdezrdez.com/diegofdezrdez/study-project-2000-rf-x9/main/BBDD.xlsx"; 
+        // CONFIGURACIÓN DE TU REPOSITORIO
+        // Se asume la rama 'main'. Si usas 'master', cambia 'main' por 'master'.
+        const GITHUB_EXCEL_URL = "https://raw.githubusercontent.com/diegofdezrdez/study-project-2000-rf-x9/main/BBDD.xlsx"; 
 
         let database = {}; 
         let officialExams = {}; 
@@ -231,7 +233,7 @@
             { title: "EL SAQUE DE ESQUINA", ref: "2" }
         ];
 
-        // --- INICIO AUTOMÁTICO ---
+        // --- INICIO AUTOMÁTICO (CLOUD FETCH) ---
         window.onload = function() {
             initRulesMenu();
             // Intentar cargar desde la nube automáticamente
@@ -239,7 +241,7 @@
         };
 
         function fetchDatabase(url) {
-            // Añadimos timestamp para evitar caché
+            // Añadimos timestamp para evitar caché del navegador/GitHub CDN
             const nocacheUrl = url + '?t=' + new Date().getTime();
             
             fetch(nocacheUrl)
@@ -250,15 +252,15 @@
                 .then(data => processExcelData(data))
                 .catch(err => {
                     console.warn("Fallo carga automática:", err);
-                    // Si falla, mostrar error y botón manual
+                    // Mostrar error en pantalla de carga
                     const errorEl = document.getElementById('loading-error-msg');
-                    errorEl.textContent = "⚠️ No se pudo conectar con la nube. " + err.message;
+                    errorEl.textContent = "⚠️ Error al conectar con la nube: " + err.message;
                     errorEl.classList.remove('hidden');
-                    document.getElementById('manual-load-btn').classList.remove('hidden');
+                    // Mostrar contenedor de error completo (con botón)
+                    document.getElementById('error-container').classList.remove('hidden');
                 });
         }
 
-        // Fallback Manual
         function showManualUpload() {
             document.getElementById('loading-overlay').classList.add('hidden');
             document.getElementById('upload-screen').classList.remove('hidden');
@@ -342,11 +344,10 @@
                 if (totalQuestions === 0) throw new Error("Archivo vacío o sin formato válido");
 
                 dbLoaded = true;
-                // Ocultar pantallas de carga y mostrar App
                 document.getElementById('loading-overlay').classList.add('hidden');
                 document.getElementById('upload-screen').classList.add('hidden');
                 document.getElementById('app').classList.remove('hidden');
-
+                
                 document.getElementById('total-questions-badge').textContent = `Total: ${totalQuestions}`;
                 updateMenuCounts();
                 renderOfficialExamsButtons();
@@ -355,7 +356,6 @@
             } catch (err) {
                 console.error(err);
                 alert("Error al procesar los datos: " + err.message);
-                // Si falla carga auto, ir a manual
                 showManualUpload();
             }
         }
@@ -379,10 +379,8 @@
 
         function renderOfficialExamsButtons() {
             const container = document.getElementById('official-exams-container');
-            // Borrar solo si es necesario, pero mantenemos I y II
             container.innerHTML = '';
 
-            // Fijos
             const fixed = [
                 {id: 'ex2425', name: 'EXAMEN II 2024-2025', bg: 'bg-emerald-600', h: 'bg-emerald-700'},
                 {id: 'ex2526', name: 'EXAMEN I 2025-2026', bg: 'bg-emerald-500', h: 'bg-emerald-600'}
@@ -396,7 +394,6 @@
                 container.appendChild(btn);
             });
 
-            // Dinámicos
             for (const [examTitle, questions] of Object.entries(officialExams)) {
                 if (questions.length > 0) {
                     const btn = document.createElement('button');
@@ -492,7 +489,7 @@
                 title = "REINTENTO DE FALLOS"; badge = "REPASO"; 
                 currentQuiz = [...fallos].sort(() => Math.random() - 0.5); fallos = [];
             }
-            // EXÁMENES SIN LÍMITE
+            // EXÁMENES COMPLETOS - SIN LÍMITE
             else if (['actas', 'reanudaciones', 'ex2425', 'ex2526', 'roc'].includes(mode)) {
                 title = `EXAMEN ${mode.toUpperCase()}`;
                 currentQuiz = selectRandomQuestions(mode, 9999);
@@ -719,5 +716,3 @@
     </script>
 </body>
 </html>
-
-
