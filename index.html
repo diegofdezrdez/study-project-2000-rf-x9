@@ -12,6 +12,7 @@
     <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
 
     <style>
+        /* ESTILOS COMFORT EYE */
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #e2e8f0; color: #334155; }
         .fade-in { animation: fadeIn 0.5s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
@@ -21,11 +22,19 @@
         .btn-rule:active { transform: translateY(0); box-shadow: none; }
         
         .selected-option { background-color: #e0f2fe !important; border: 2px solid #0ea5e9 !important; color: #0c4a6e !important; font-weight: 700; }
-        .text-content-style { text-align: justify; text-justify: inter-word; -webkit-user-select: text !important; user-select: text !important; cursor: text; }
+        
+        /* Texto justificado y seleccionable */
+        .text-content-style { 
+            text-align: justify; 
+            text-justify: inter-word; 
+            -webkit-user-select: text !important; 
+            user-select: text !important; 
+            cursor: text; 
+        }
         
         /* Loader Overlay */
-        #loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #f1f5f9; z-index: 50; display: flex; flex-direction: column; justify-content: center; align-items: center; }
-        #loader { border-top-color: #4f46e5; -webkit-animation: spinner 1s linear infinite; animation: spinner 1s linear infinite; }
+        #loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #f8fafc; z-index: 50; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+        #loader-spinner { border-top-color: #4f46e5; -webkit-animation: spinner 1s linear infinite; animation: spinner 1s linear infinite; }
         @keyframes spinner { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
@@ -33,15 +42,19 @@
 
     <!-- PANTALLA DE CARGA AUTOMÁTICA -->
     <div id="loading-overlay">
-        <div id="loader" class="ease-linear rounded-full border-4 border-t-4 border-slate-300 h-16 w-16 mb-6"></div>
-        <h2 class="text-3xl font-bold text-slate-800 mb-2">Conectando con la Base de Datos...</h2>
-        <p class="text-slate-500 text-lg">Descargando preguntas actualizadas de la nube</p>
+        <div id="loader-spinner" class="ease-linear rounded-full border-4 border-t-4 border-slate-300 h-16 w-16 mb-6"></div>
+        <h2 id="loading-title" class="text-3xl font-bold text-slate-800 mb-2">Conectando con la Nube...</h2>
+        <p id="loading-subtitle" class="text-slate-500 text-lg">Descargando preguntas actualizadas</p>
         
-        <!-- Mensaje de error y botón manual (solo aparecen si falla la nube) -->
-        <div id="error-container" class="hidden flex flex-col items-center mt-6 w-full max-w-md px-4">
-            <p id="loading-error-msg" class="text-rose-600 font-bold text-center mb-4 bg-rose-50 p-3 rounded border border-rose-200"></p>
-            <button onclick="showManualUpload()" class="bg-slate-600 text-white py-3 px-6 rounded-xl font-bold hover:bg-slate-700 transition shadow-lg">
-                <i class="fa-solid fa-folder-open mr-2"></i> Cargar archivo localmente
+        <!-- Mensaje de error y botón manual (oculto al inicio) -->
+        <div id="error-container" class="hidden flex flex-col items-center mt-8 w-full max-w-lg px-4 animate-bounce-in">
+            <div class="bg-rose-50 border-l-4 border-rose-500 text-rose-700 p-4 rounded shadow-md mb-6 w-full text-left">
+                <p class="font-bold"><i class="fa-solid fa-circle-exclamation mr-2"></i>Error de Conexión</p>
+                <p class="text-sm mt-1" id="error-details">No se pudo acceder al archivo en GitHub.</p>
+                <p class="text-xs mt-2 text-rose-500">Posibles causas: Sin internet, Repositorio Privado o archivo renombrado.</p>
+            </div>
+            <button onclick="showManualUpload()" class="bg-indigo-600 text-white py-3 px-8 rounded-xl font-bold hover:bg-indigo-700 transition shadow-lg flex items-center text-lg">
+                <i class="fa-solid fa-folder-open mr-3"></i> Cargar archivo BBDD.xlsx Manualmente
             </button>
         </div>
     </div>
@@ -49,11 +62,11 @@
     <!-- PANTALLA DE SUBIDA MANUAL (Respaldo) -->
     <div id="upload-screen" class="hidden w-full max-w-4xl bg-white rounded-2xl shadow-2xl p-10 text-center relative z-10 fade-in border border-slate-200">
         <div class="mb-8">
-            <div class="bg-rose-100 p-6 rounded-full inline-block mb-6">
-                <i class="fa-solid fa-cloud-slash text-6xl text-rose-600"></i>
+            <div class="bg-indigo-100 p-6 rounded-full inline-block mb-6">
+                <i class="fa-solid fa-cloud-arrow-up text-6xl text-indigo-600"></i>
             </div>
             <h2 class="text-3xl font-bold text-slate-800 mb-2">Modo Manual</h2>
-            <p class="text-slate-500">No se pudo conectar con la nube. Por favor, selecciona tu archivo <strong>BBDD.xlsx</strong>.</p>
+            <p class="text-slate-500">Selecciona tu copia local de <strong>BBDD.xlsx</strong> para continuar.</p>
         </div>
         <label class="cursor-pointer bg-indigo-600 text-white font-bold py-4 px-10 rounded-xl shadow-lg hover:bg-indigo-700 transition transform hover:-translate-y-1 inline-block text-lg">
             <i class="fa-solid fa-folder-open mr-3"></i> SELECCIONAR ARCHIVO
@@ -81,7 +94,8 @@
 
         <!-- PANTALLA 2: MENÚ PRINCIPAL -->
         <div id="menu-screen" class="fade-in">
-            <!-- SECCIÓN 1: EXÁMENES ESPECIALES -->
+            
+            <!-- SECCIÓN 1: EXÁMENES ESPECIALES (ARRIBA) -->
             <div class="mb-10">
                 <h2 class="text-xl font-bold text-slate-700 mb-6 uppercase tracking-wide border-l-4 border-purple-600 pl-4">
                     EXÁMENES ESPECIALES:
@@ -109,14 +123,6 @@
                         <span class="drop-shadow-sm">EXAMEN R-O-C</span>
                         <span id="count-roc" class="text-xs bg-black bg-opacity-20 px-2 py-1 rounded font-mono"></span>
                     </button>
-                    <button onclick="startTest('mixto')" class="btn-rule bg-purple-500 text-white p-5 rounded-xl font-bold shadow-md hover:bg-purple-600 flex items-center justify-between">
-                        <span class="drop-shadow-sm">EXAMEN MIXTO INFINITO</span>
-                        <i class="fa-solid fa-infinity opacity-50"></i>
-                    </button>
-                    <button onclick="startTest('examen_30')" class="btn-rule bg-rose-500 text-white p-5 rounded-xl font-bold shadow-md hover:bg-rose-600 flex items-center justify-between">
-                        <span class="drop-shadow-sm">EXAMEN DE 30</span>
-                        <span class="text-xs bg-black bg-opacity-20 px-2 py-1 rounded font-mono">30</span>
-                    </button>
                     <button onclick="startTest('ingles')" class="btn-rule bg-indigo-500 text-white p-5 rounded-xl font-bold shadow-md hover:bg-indigo-600 flex justify-between items-center">
                         <span class="drop-shadow-sm">EXAMEN INGLÉS</span>
                         <span id="count-ingles" class="text-xs bg-black bg-opacity-20 px-2 py-1 rounded font-mono"></span>
@@ -124,6 +130,14 @@
                     <button onclick="startTest('estatutos')" class="btn-rule bg-slate-600 text-white p-5 rounded-xl font-bold shadow-md hover:bg-slate-700 flex justify-between items-center">
                         <span class="drop-shadow-sm">EXAMEN ESTATUTOS</span>
                         <span id="count-estatutos" class="text-xs bg-black bg-opacity-20 px-2 py-1 rounded font-mono"></span>
+                    </button>
+                    <button onclick="startTest('mixto')" class="btn-rule bg-purple-500 text-white p-5 rounded-xl font-bold shadow-md hover:bg-purple-600 flex items-center justify-between">
+                        <span class="drop-shadow-sm">EXAMEN MIXTO INFINITO</span>
+                        <i class="fa-solid fa-infinity opacity-50"></i>
+                    </button>
+                    <button onclick="startTest('examen_30')" class="btn-rule bg-rose-500 text-white p-5 rounded-xl font-bold shadow-md hover:bg-rose-600 flex items-center justify-between">
+                        <span class="drop-shadow-sm">EXAMEN DE 30</span>
+                        <span class="text-xs bg-black bg-opacity-20 px-2 py-1 rounded font-mono">30</span>
                     </button>
                 </div>
             </div>
@@ -142,6 +156,7 @@
                         <span class="drop-shadow-sm">EXAMEN I 2025-2026</span>
                         <span id="count-ex2526" class="text-xs bg-black bg-opacity-20 px-2 py-1 rounded font-mono"></span>
                     </button>
+                    <!-- Aquí se añaden los dinámicos -->
                 </div>
             </div>
 
@@ -198,14 +213,16 @@
     </div>
 
     <script>
-        // CONFIGURACIÓN DE TU REPOSITORIO
-        // Se asume la rama 'main'. Si usas 'master', cambia 'main' por 'master'.
+        // === URL CONFIGURADA ===
+        // URL proporcionada por el usuario:
+        // https://raw.githubusercontent.com/diegofdezrdez/study-project-2000-rf-x9/main/BBDD.xlsx
         const GITHUB_EXCEL_URL = "https://raw.githubusercontent.com/diegofdezrdez/study-project-2000-rf-x9/main/BBDD.xlsx"; 
 
         let database = {}; 
         let officialExams = {}; 
         let dbLoaded = false;
 
+        // Mapeo para las pestañas del Excel
         const SHEET_MAPPING = {
             'Regla1': 'Regla1', 'Regla 1': 'Regla1', 'Regla2': 'Regla2', 'Regla 2': 'Regla2',
             'Regla3': 'Regla3', 'Regla 3': 'Regla3', 'Regla4': 'Regla4', 'Regla 4': 'Regla4',
@@ -233,7 +250,7 @@
             { title: "EL SAQUE DE ESQUINA", ref: "2" }
         ];
 
-        // --- INICIO AUTOMÁTICO (CLOUD FETCH) ---
+        // --- INICIO AUTOMÁTICO ---
         window.onload = function() {
             initRulesMenu();
             // Intentar cargar desde la nube automáticamente
@@ -241,22 +258,24 @@
         };
 
         function fetchDatabase(url) {
-            // Añadimos timestamp para evitar caché del navegador/GitHub CDN
             const nocacheUrl = url + '?t=' + new Date().getTime();
             
             fetch(nocacheUrl)
                 .then(res => {
-                    if(!res.ok) throw new Error("No se pudo descargar el archivo (Error " + res.status + ")");
+                    if(!res.ok) throw new Error("Error de descarga (" + res.status + ")");
                     return res.arrayBuffer();
                 })
                 .then(data => processExcelData(data))
                 .catch(err => {
-                    console.warn("Fallo carga automática:", err);
-                    // Mostrar error en pantalla de carga
+                    console.warn(err);
+                    document.getElementById('loader-spinner').classList.add('hidden'); // Ocultar spinner
+                    document.getElementById('loading-title').innerText = "¡Vaya!";
+                    document.getElementById('loading-subtitle').innerText = "";
+                    
                     const errorEl = document.getElementById('loading-error-msg');
-                    errorEl.textContent = "⚠️ Error al conectar con la nube: " + err.message;
-                    errorEl.classList.remove('hidden');
-                    // Mostrar contenedor de error completo (con botón)
+                    // IMPORTANTE: El error puede ser porque el repositorio es privado o el archivo no está en 'main'
+                    errorEl.innerHTML = `No se pudo cargar la base de datos desde la nube.<br><span class="text-sm text-slate-500">${err.message}</span>`;
+                    
                     document.getElementById('error-container').classList.remove('hidden');
                 });
         }
@@ -494,11 +513,12 @@
                 title = `EXAMEN ${mode.toUpperCase()}`;
                 currentQuiz = selectRandomQuestions(mode, 9999);
             }
+            // EXAMENES OFICIALES DINÁMICOS - SIN LÍMITE
             else if (mode === 'official_dynamic') {
                 title = param; 
                 currentQuiz = [...officialExams[param]];
             }
-            else if (mode === 'ingles' || mode === 'estatutos') { // Especiales con 10
+            else if (mode === 'ingles' || mode === 'estatutos') { 
                 title = `EXAMEN ${mode.toUpperCase()}`;
                 currentQuiz = selectRandomQuestions(mode, 10);
             }
@@ -508,7 +528,7 @@
             }
 
             if (!currentQuiz || currentQuiz.length === 0) {
-                alert("No hay preguntas disponibles para este modo.");
+                alert("No hay preguntas disponibles.");
                 return;
             }
 
